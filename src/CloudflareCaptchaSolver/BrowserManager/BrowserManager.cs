@@ -1,4 +1,5 @@
 ﻿using Microsoft.Playwright;
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
 namespace CloudflareCaptchaSolver;
@@ -123,6 +124,8 @@ public class BrowserManager : IAsyncDisposable
             context.Dispose = pageContext.Dispose;
         }
 
+        _logger.LogInformation($"Run {_contexts.Select(c => c.Browser).Distinct().Count()} with {_contexts.Count} pages");
+
         return pageContext;
     }
 
@@ -135,6 +138,8 @@ public class BrowserManager : IAsyncDisposable
         }
 
         _contexts.Remove(pageContext);
+
+        _logger.LogInformation($"Run {_contexts.Select(c => c.Browser).Distinct().Count()} with {_contexts.Count} pages");
     }
 }
 
