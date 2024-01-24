@@ -5,8 +5,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddCaptchaSwaggerGen();
-builder.Services.AddBrowserManager();
-builder.Services.AddCommandManager();
+builder.Services.AddBrowserManager(c => builder.Configuration.Bind("BrowserManager", c));
+builder.Services.AddCommandManager(c => builder.Configuration.Bind("CommandManager", c));
 
 var app = builder.Build();
 

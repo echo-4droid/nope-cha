@@ -49,6 +49,11 @@ public class BrowserManager : IAsyncDisposable
         }
     }
 
+    private readonly BrowserManagerConfiguration _configuration;
+    private readonly ILogger _logger;
+    private readonly IPlaywright _playwright;
+    private readonly List<PageContext> _contexts;
+
     private async ValueTask<string> Solve(IPage page, SolveCaptcha command)
     {
         await page.GotoAsync(command.Url.ToString());
@@ -58,7 +63,7 @@ public class BrowserManager : IAsyncDisposable
 
         var checkbox = frame.Locator("#challenge-stage input[type=checkbox]");
 
-        await checkbox.WaitForAsync(new LocatorWaitForOptions() { State = WaitForSelectorState.Visible });
+        await checkbox.WaitForAsync(new LocatorWaitForOptions() { State = WaitForSelectorState.Visible, Timeout = 60000 });
         await checkbox.HoverAsync();
         await checkbox.ClickAsync();
 
@@ -72,22 +77,42 @@ public class BrowserManager : IAsyncDisposable
         var browser = _contexts
             .Where(c => !c.Dispose && _contexts.Count(cc => cc.Browser == c.Browser) < _configuration.PagePerBrowserInstance)
             .Select(c => c.Browser)
-            .FirstOrDefault() ?? await _playwright.Chromium.LaunchAsync(new() { Headless = false });
+            .FirstOrDefault();
+            
+        if (browser == null)
+        {
+            var browserOptions = new BrowserTypeLaunchOptions() { Headless = false };
+
+            if (_configuration.Proxies.Count != 0)
+            {
+                browserOptions.Proxy = new Proxy
+                {
+                    Server = "http://overrided-proxy-server"
+                };
+            }
+
+            browser = await _playwright.Chromium.LaunchAsync(browserOptions);
+        }
 
         var activePageCount = _contexts.Count(c => c.Browser == browser);
 
-        //todo: add proxy
-        //var proxy = new Proxy
-        //{
-        //    Server = "http://myproxy.com:3128",
-        //    Username = "user",
-        //    Password = "pwd"
-        //};
+        var options = new BrowserNewPageOptions();
+
+        if (_configuration.Proxies.Count != 0)
+        {
+            var random = (new Random()).Next(_configuration.Proxies.Count);
+            options.Proxy = new Proxy
+            {
+                Server = _configuration.Proxies[random].Server,
+                Username = _configuration.Proxies[random].Username,
+                Password = _configuration.Proxies[random].Password
+            };
+        }
 
         var pageContext = new PageContext
         {
             Browser = browser,
-            Page = await browser.NewPageAsync(), // new() { Proxy = proxy }
+            Page = await browser.NewPageAsync(options),
             Dispose = ++activePageCount >= _configuration.PagePerBrowserInstance,
         };
 
@@ -111,18 +136,21 @@ public class BrowserManager : IAsyncDisposable
 
         _contexts.Remove(pageContext);
     }
-
-    private readonly BrowserManagerConfiguration _configuration;
-    private readonly ILogger _logger;
-    private readonly IPlaywright _playwright;
-    private readonly List<PageContext> _contexts;
 }
 
-public class BrowserManagerConfiguration
+public record BrowserManagerConfiguration
 {
     public IBrowserType? BrowserType { get; set; }
     public uint PagePerBrowserInstance { get; set; }
     public bool BrowserRestart { get; set; }
+    public List<ProxyConfiguration> Proxies { get; set; } = new();
+}
+
+public record ProxyConfiguration
+{
+    public string Server { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
 }
 
 internal record PageContext
