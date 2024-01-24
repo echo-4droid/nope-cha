@@ -29,22 +29,25 @@ public static class CaptchaEndpointInstaller
     {
         var group = routes.MapGroup("/captcha").WithTags("Captcha");
 
-        group.MapGet("/", async ([AsParameters] GetCaptchaModel model, [FromServices] CommandManager manager) =>
+        group.MapGet("/", async ([AsParameters] GetCaptchaModel model, [FromServices] CommandManager commandManager, [FromServices] AuthenticationManager authManager) =>
         {
-            var report = await manager.GetCommandExecutionReport(model.CommandId);
+            if (!authManager.HasAccess(model.Key, model.CommandId)) return Results.NotFound($"CommandId '{model.CommandId}' for key '{model.Key}' not found");
 
-            if (report == null) return Results.BadRequest($"Task '{model.CommandId}' is not found");
+            var report = await commandManager.GetCommandExecutionReport(model.CommandId);
+            if (report == null) return Results.NotFound($"Task '{model.CommandId}' is not found");
 
             return TypedResults.Ok(new GetCaptchaResultModel() { Status = report.Status, Data = report.Result?.ToString() });
         })
         .WithName("CaptchaResolve")
-        .Produces<string>(StatusCodes.Status400BadRequest)
+        .Produces<string>(StatusCodes.Status404NotFound)
         .Produces<GetCaptchaResultModel>(StatusCodes.Status200OK)
         .WithOpenApi();
 
-        group.MapPost("/", async ([FromBody] PostCaptchaModel model, [FromServices] CommandManager manager) =>
+        group.MapPost("/", async ([FromBody] PostCaptchaModel model, [FromServices] CommandManager commandManager, [FromServices] AuthenticationManager authManager) =>
         {
-            var commandId = await manager.Enqueue(new SolveCaptcha()
+            if (!authManager.Authenticate(model.Key)) return Results.NotFound($"Key '{model.Key}' not found");
+
+            var commandId = await commandManager.Enqueue(new SolveCaptcha()
             {
                 Key = model.Key,
                 Type = model.Type,
@@ -55,6 +58,8 @@ public static class CaptchaEndpointInstaller
             return TypedResults.Accepted("/captcha", new PostCaptchaResultModel() { Status = CommandExecutionStatus.Queued, CommandId = commandId });
         })
         .WithName("SolveCaptcha")
+        .Produces<string>(StatusCodes.Status404NotFound)
+        .Produces<PostCaptchaResultModel>(StatusCodes.Status200OK)
         .WithOpenApi();
     }
 

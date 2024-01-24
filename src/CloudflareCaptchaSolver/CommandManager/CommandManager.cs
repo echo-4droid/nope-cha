@@ -1,13 +1,15 @@
-﻿using System.Threading.Channels;
+﻿using System.Collections.Concurrent;
+using System.Threading.Channels;
 
 namespace CloudflareCaptchaSolver;
 
 public class CommandManager
 {
-    public CommandManager(CommandManagerConfiguration configuration, BrowserManager browserManager, ILogger<CommandManager> logger)
+    public CommandManager(CommandManagerConfiguration configuration, BrowserManager browserManager, AuthenticationManager authManager, ILogger<CommandManager> logger)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _browserManager = browserManager ?? throw new ArgumentNullException(nameof(browserManager));
+        _authManager = authManager ?? throw new ArgumentNullException(nameof(authManager));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _reports = [];
 
@@ -25,6 +27,7 @@ public class CommandManager
 
         if (_reports.TryAdd(command.Id, new CommandExecutionReport(command)))
         {
+            _authManager.Bind(command.Key, command.Id);
             await _queue.Writer.WriteAsync(command);
 
             return command.Id;
@@ -41,8 +44,9 @@ public class CommandManager
 
     private readonly CommandManagerConfiguration _configuration;
     private readonly BrowserManager _browserManager;
+    private readonly AuthenticationManager _authManager;
     private readonly ILogger _logger;
-    private readonly Dictionary<Guid, CommandExecutionReport> _reports;
+    private readonly ConcurrentDictionary<Guid, CommandExecutionReport> _reports;
     private readonly Channel<Command> _queue;
 
     private async ValueTask ProcessQueue()
@@ -55,9 +59,12 @@ public class CommandManager
                 try
                 {
                     _reports[command.Id].Status = CommandExecutionStatus.Processing;
-                    var result = await _browserManager.Solve(captcha);
-                    _reports[command.Id].Status = result != null ? CommandExecutionStatus.Success : CommandExecutionStatus.Failed;
-                    _reports[command.Id].Result = result;
+                    _ = _browserManager.Solve(captcha).AsTask().ContinueWith(async task =>
+                    {
+                        var result = await task;
+                        _reports[command.Id].Status = result != null ? CommandExecutionStatus.Success : CommandExecutionStatus.Failed;
+                        _reports[command.Id].Result = result;
+                    });
                 }
                 catch (Exception ex)
                 {
