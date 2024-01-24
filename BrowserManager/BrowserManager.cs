@@ -1,4 +1,5 @@
 ﻿using Microsoft.Playwright;
+using System.Text.RegularExpressions;
 
 namespace CloudflareCaptchaSolver;
 
@@ -34,19 +35,36 @@ public class BrowserManager : IAsyncDisposable
         var solveCommand = command as SolveCaptcha ?? throw new InvalidCastException(nameof(command));
         var pageContext = await GetNextPageContext();
 
-        var result = await Solve(pageContext.Page, solveCommand);
-
-        await DisposePageContext(pageContext);
-
-        return result;
+        try
+        {
+            return await Solve(pageContext.Page, solveCommand);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception(ex.Message, ex);
+        }
+        finally
+        {
+            await DisposePageContext(pageContext);
+        }
     }
 
     private async ValueTask<string> Solve(IPage page, SolveCaptcha command)
     {
-        // Test page at https://nopecha.com/demo/cloudflare
         await page.GotoAsync(command.Url.ToString());
 
-        return "test case";
+        var frame = page.FrameByUrl(new Regex(@"\S+cloudflare\S+"));
+        if (frame == null) return string.Empty;
+
+        var checkbox = frame.Locator("#challenge-stage input[type=checkbox]");
+
+        await checkbox.WaitForAsync(new LocatorWaitForOptions() { State = WaitForSelectorState.Visible });
+        await checkbox.HoverAsync();
+        await checkbox.ClickAsync();
+
+        await Task.Delay(1000);
+
+        return "EXAMPLE-TOKEN";
     }
 
     private async ValueTask<PageContext> GetNextPageContext()
@@ -54,21 +72,22 @@ public class BrowserManager : IAsyncDisposable
         var browser = _contexts
             .Where(c => !c.Dispose && _contexts.Count(cc => cc.Browser == c.Browser) < _configuration.PagePerBrowserInstance)
             .Select(c => c.Browser)
-            .FirstOrDefault() ?? await _playwright.Firefox.LaunchAsync();
+            .FirstOrDefault() ?? await _playwright.Chromium.LaunchAsync(new() { Headless = false });
 
         var activePageCount = _contexts.Count(c => c.Browser == browser);
 
-        var proxy = new Proxy
-        {
-            Server = "http://myproxy.com:3128",
-            Username = "user",
-            Password = "pwd"
-        };
+        //todo: add proxy
+        //var proxy = new Proxy
+        //{
+        //    Server = "http://myproxy.com:3128",
+        //    Username = "user",
+        //    Password = "pwd"
+        //};
 
         var pageContext = new PageContext
         {
             Browser = browser,
-            Page = await browser.NewPageAsync(new() { Proxy = proxy }),
+            Page = await browser.NewPageAsync(), // new() { Proxy = proxy }
             Dispose = ++activePageCount >= _configuration.PagePerBrowserInstance,
         };
 
