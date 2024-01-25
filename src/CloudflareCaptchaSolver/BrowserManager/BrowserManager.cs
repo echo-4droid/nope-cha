@@ -1,10 +1,9 @@
 ﻿using Microsoft.Playwright;
-using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
 namespace CloudflareCaptchaSolver;
 
-public class BrowserManager : IAsyncDisposable
+public partial class BrowserManager : IAsyncDisposable
 {
     public BrowserManager(BrowserManagerConfiguration configuration, ILogger<BrowserManager> logger)
     {
@@ -57,9 +56,23 @@ public class BrowserManager : IAsyncDisposable
 
     private async ValueTask<string> Solve(IPage page, SolveCaptcha command)
     {
+        await page.RouteAsync("**/*", async route =>
+        {
+            if (route.Request.ResourceType is not "document" && !CloudflarePattern().IsMatch(route.Request.Url))
+            {
+                _logger.LogWarning($"BLOCKED: {route.Request.Method} {route.Request.Url} '{route.Request.ResourceType}'");
+                await route.AbortAsync();
+            }
+            else
+            {
+                _logger.LogWarning($"LOADED: {route.Request.Method} {route.Request.Url} '{route.Request.ResourceType}'");
+                await route.ContinueAsync();
+            }
+        });
+
         await page.GotoAsync(command.Url.ToString());
 
-        var frame = page.FrameByUrl(new Regex(@"\S+cloudflare\S+"));
+        var frame = page.FrameByUrl(CloudflarePattern());
         if (frame == null) return string.Empty;
 
         var checkbox = frame.Locator("#challenge-stage input[type=checkbox]");
@@ -68,7 +81,7 @@ public class BrowserManager : IAsyncDisposable
         await checkbox.HoverAsync();
         await checkbox.ClickAsync();
 
-        await Task.Delay(1000);
+        await Task.Delay(10000);
 
         return "EXAMPLE-TOKEN";
     }
@@ -79,7 +92,7 @@ public class BrowserManager : IAsyncDisposable
             .Where(c => !c.Dispose && _contexts.Count(cc => cc.Browser == c.Browser) < _configuration.PagePerBrowserInstance)
             .Select(c => c.Browser)
             .FirstOrDefault();
-            
+
         if (browser == null)
         {
             var browserOptions = new BrowserTypeLaunchOptions() { Headless = false };
@@ -141,6 +154,9 @@ public class BrowserManager : IAsyncDisposable
 
         _logger.LogInformation($"Run {_contexts.Select(c => c.Browser).Distinct().Count()} with {_contexts.Count} pages");
     }
+
+    [GeneratedRegex(@"\S+cloudflare\S+|\S+challenge-platform\S+")]
+    private static partial Regex CloudflarePattern();
 }
 
 public record BrowserManagerConfiguration
