@@ -21,7 +21,7 @@ public class CommandManager
         Task.Run(ProcessQueue);
     }
 
-    public async ValueTask<Guid> Enqueue(Command command)
+    public async Task<Guid> Enqueue(Command command)
     {
         ArgumentNullException.ThrowIfNull(command);
 
@@ -36,10 +36,10 @@ public class CommandManager
         throw new InvalidOperationException();
     }
 
-    public ValueTask<CommandExecutionReport?> GetCommandExecutionReport(Guid commandId)
+    public Task<CommandExecutionReport?> GetCommandExecutionReport(Guid commandId)
     {
         _reports.TryGetValue(commandId, out var report);
-        return ValueTask.FromResult(report);
+        return Task.FromResult(report);
     }
 
     private readonly CommandManagerConfiguration _configuration;
@@ -49,7 +49,7 @@ public class CommandManager
     private readonly ConcurrentDictionary<Guid, CommandExecutionReport> _reports;
     private readonly Channel<Command> _queue;
 
-    private async ValueTask ProcessQueue()
+    private async Task ProcessQueue()
     {
         while (true)
         {
@@ -59,7 +59,10 @@ public class CommandManager
                 try
                 {
                     _reports[command.Id].Status = CommandExecutionStatus.Processing;
-                    _ = _browserManager.Solve(captcha).AsTask().ContinueWith(async task =>
+                    //var result = await _browserManager.Solve(captcha);
+                    //_reports[command.Id].Status = !string.IsNullOrEmpty(result) ? CommandExecutionStatus.Success : CommandExecutionStatus.Failed;
+                    //_reports[command.Id].Result = result;
+                    _ = _browserManager.Solve(captcha).ContinueWith(async task =>
                     {
                         var result = await task;
                         _reports[command.Id].Status = !string.IsNullOrEmpty(result) ? CommandExecutionStatus.Success : CommandExecutionStatus.Failed;

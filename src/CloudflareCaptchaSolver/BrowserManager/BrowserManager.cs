@@ -30,7 +30,7 @@ public partial class BrowserManager : IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 
-    public async ValueTask<string> Solve(Command command)
+    public async Task<string> Solve(Command command)
     {
         var solveCommand = command as SolveCaptcha ?? throw new InvalidCastException(nameof(command));
         var pageContext = await GetNextPageContext();
@@ -54,25 +54,25 @@ public partial class BrowserManager : IAsyncDisposable
     private readonly IPlaywright _playwright;
     private readonly List<PageContext> _contexts;
 
-    private async ValueTask<string> Solve(IPage page, SolveCaptcha command)
+    private async Task<string> Solve(IPage page, SolveCaptcha command)
     {
         await page.RouteAsync("**/*", async route =>
         {
-            if (route.Request.ResourceType is not "document" && !CloudflarePattern().IsMatch(route.Request.Url))
+            if (route.Request.ResourceType is not "document" && !CloudflareEnvironmentPattern().IsMatch(route.Request.Url))
             {
-                _logger.LogWarning($"BLOCKED: {route.Request.Method} {route.Request.Url} '{route.Request.ResourceType}'");
+                _logger.LogInformation($"BLOCKED: {route.Request.Method} {route.Request.Url} '{route.Request.ResourceType}'");
                 await route.AbortAsync();
             }
             else
             {
-                _logger.LogWarning($"LOADED: {route.Request.Method} {route.Request.Url} '{route.Request.ResourceType}'");
+                _logger.LogInformation($"LOADED: {route.Request.Method} {route.Request.Url} '{route.Request.ResourceType}'");
                 await route.ContinueAsync();
             }
         });
 
         await page.GotoAsync(command.Url.ToString());
 
-        var frame = page.FrameByUrl(CloudflarePattern());
+        var frame = page.FrameByUrl(CloudflareEnvironmentPattern());
         if (frame == null) return string.Empty;
 
         var checkbox = frame.Locator("#challenge-stage input[type=checkbox]");
@@ -81,12 +81,10 @@ public partial class BrowserManager : IAsyncDisposable
         await checkbox.HoverAsync();
         await checkbox.ClickAsync();
 
-        await Task.Delay(10000);
-
         return "EXAMPLE-TOKEN";
     }
 
-    private async ValueTask<PageContext> GetNextPageContext()
+    private async Task<PageContext> GetNextPageContext()
     {
         var browser = _contexts
             .Where(c => !c.Dispose && _contexts.Count(cc => cc.Browser == c.Browser) < _configuration.PagePerBrowserInstance)
@@ -142,7 +140,7 @@ public partial class BrowserManager : IAsyncDisposable
         return pageContext;
     }
 
-    private async ValueTask DisposePageContext(PageContext pageContext)
+    private async Task DisposePageContext(PageContext pageContext)
     {
         if (!pageContext.Page.IsClosed) await pageContext.Page.CloseAsync();
         if (pageContext.Dispose && _contexts.Count(c => c.Browser == pageContext.Browser) <= 1)
@@ -156,7 +154,10 @@ public partial class BrowserManager : IAsyncDisposable
     }
 
     [GeneratedRegex(@"\S+cloudflare\S+|\S+challenge-platform\S+")]
-    private static partial Regex CloudflarePattern();
+    private static partial Regex CloudflareEnvironmentPattern();
+
+    [GeneratedRegex(@"\S+challenges.cloudflare.com/turnstile\S+api.js\S*")]
+    private static partial Regex CloudflareApiJsPattern();
 }
 
 public record BrowserManagerConfiguration
