@@ -3,8 +3,17 @@ using System.Text.RegularExpressions;
 
 namespace CloudflareCaptchaSolver;
 
+/// <summary>
+/// Реализует управление браузерами и страницами, решение капчи
+/// </summary>
 public partial class BrowserManager : IAsyncDisposable
 {
+    /// <summary>
+    /// Конструктор
+    /// </summary>
+    /// <param name="configuration">Конфигурация</param>
+    /// <param name="logger">Логгер</param>
+    /// <exception cref="ArgumentNullException"></exception>
     public BrowserManager(BrowserManagerConfiguration configuration, ILogger<BrowserManager> logger)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
@@ -13,6 +22,10 @@ public partial class BrowserManager : IAsyncDisposable
         _contexts = [];
     }
 
+    /// <summary>
+    /// Освобождает ресурсы
+    /// </summary>
+    /// <returns></returns>
     public async ValueTask DisposeAsync()
     {
         foreach (var contexts in _contexts.GroupBy(c => c.Browser))
@@ -30,6 +43,13 @@ public partial class BrowserManager : IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Решает капчу
+    /// </summary>
+    /// <param name="command">Команда на решение капчи</param>
+    /// <returns>Токен решения капчи</returns>
+    /// <exception cref="InvalidCastException"></exception>
+    /// <exception cref="Exception"></exception>
     public async Task<string> Solve(Command command)
     {
         var solveCommand = command as SolveCaptcha ?? throw new InvalidCastException(nameof(command));
@@ -93,7 +113,7 @@ public partial class BrowserManager : IAsyncDisposable
 
         if (browser == null)
         {
-            var browserOptions = new BrowserTypeLaunchOptions() { Headless = false };
+            var browserOptions = new BrowserTypeLaunchOptions();
 
             if (_configuration.Proxies.Count != 0)
             {
@@ -125,7 +145,7 @@ public partial class BrowserManager : IAsyncDisposable
         {
             Browser = browser,
             Page = await browser.NewPageAsync(options),
-            Dispose = ++activePageCount >= _configuration.PagePerBrowserInstance,
+            Dispose = _configuration.BrowserRestart && ++activePageCount >= _configuration.PagePerBrowserInstance,
         };
 
         _contexts.Add(pageContext);
@@ -160,18 +180,45 @@ public partial class BrowserManager : IAsyncDisposable
     private static partial Regex CloudflareApiJsPattern();
 }
 
+/// <summary>
+/// Конфигурация менеджера браузеров
+/// </summary>
 public record BrowserManagerConfiguration
 {
-    public IBrowserType? BrowserType { get; set; }
+    /// <summary>
+    /// Максимальное количество открытых страниц на один браузер
+    /// </summary>
     public uint PagePerBrowserInstance { get; set; }
+
+    /// <summary>
+    /// Закрывать браузер после достижения максимального количества страниц
+    /// </summary>
     public bool BrowserRestart { get; set; }
-    public List<ProxyConfiguration> Proxies { get; set; } = new();
+
+    /// <summary>
+    /// Список прокси серверов
+    /// </summary>
+    public List<ProxyConfiguration> Proxies { get; set; } = [];
 }
 
+/// <summary>
+/// Конфигурация прокси сервера
+/// </summary>
 public record ProxyConfiguration
 {
+    /// <summary>
+    /// Адрес сервера
+    /// </summary>
     public string Server { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Логин (если требуется)
+    /// </summary>
     public string Username { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Пароль (если требуется)
+    /// </summary>
     public string Password { get; set; } = string.Empty;
 }
 

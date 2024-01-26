@@ -5,6 +5,11 @@ namespace CloudflareCaptchaSolver;
 
 public static class CaptchaEndpointInstaller
 {
+    /// <summary>
+    /// Добавляет сконфигурированный Swagger
+    /// </summary>
+    /// <param name="services">Коллекция сервисов</param>
+    /// <returns></returns>
     public static IServiceCollection AddCaptchaSwaggerGen(this IServiceCollection services)
     {
         services.AddSwaggerGen(cfg =>
@@ -25,6 +30,10 @@ public static class CaptchaEndpointInstaller
         return services;
     }
 
+    /// <summary>
+    /// Добавляет эндпоинты для предоставления доступа к сервису
+    /// </summary>
+    /// <param name="routes"></param>
     public static void MapCaptchaEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/captcha").WithTags("Captcha");
@@ -80,7 +89,14 @@ public static class CaptchaEndpointInstaller
 
     internal record GetCaptchaResultModel
     {
+        /// <summary>
+        /// Статус выполнения команды
+        /// </summary>
         public CommandExecutionStatus Status { get; set; }
+
+        /// <summary>
+        /// Результат выполнения команды
+        /// </summary>
         public string? Data { get; set; }
     }
 
@@ -113,7 +129,14 @@ public static class CaptchaEndpointInstaller
 
     internal record PostCaptchaResultModel
     {
+        /// <summary>
+        /// Статус выполнения команды
+        /// </summary>
         public CommandExecutionStatus Status { get; set; }
+
+        /// <summary>
+        /// Идентификатор команды
+        /// </summary>
         public Guid CommandId { get; set; }
     }
 }

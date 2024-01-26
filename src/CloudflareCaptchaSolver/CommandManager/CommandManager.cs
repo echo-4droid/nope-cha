@@ -3,8 +3,19 @@ using System.Threading.Channels;
 
 namespace CloudflareCaptchaSolver;
 
+/// <summary>
+/// Реализует асинхронную очередь команд
+/// </summary>
 public class CommandManager
 {
+    /// <summary>
+    /// Конструктор
+    /// </summary>
+    /// <param name="configuration">Конфигурация</param>
+    /// <param name="browserManager">Менеджер браузера</param>
+    /// <param name="authManager">Менеджер аутентификации</param>
+    /// <param name="logger">Логгер</param>
+    /// <exception cref="ArgumentNullException"></exception>
     public CommandManager(CommandManagerConfiguration configuration, BrowserManager browserManager, AuthenticationManager authManager, ILogger<CommandManager> logger)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
@@ -21,6 +32,12 @@ public class CommandManager
         Task.Run(ProcessQueue);
     }
 
+    /// <summary>
+    /// Добавляет команду в очередь
+    /// </summary>
+    /// <param name="command">Команда</param>
+    /// <returns>идентификатор команды</returns>
+    /// <exception cref="InvalidOperationException"></exception>
     public async Task<Guid> Enqueue(Command command)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -36,6 +53,11 @@ public class CommandManager
         throw new InvalidOperationException();
     }
 
+    /// <summary>
+    /// Возвращает отчёт о выполнении команды
+    /// </summary>
+    /// <param name="commandId">Идентификатор команды</param>
+    /// <returns>Отчёт о выполнении команды</returns>
     public Task<CommandExecutionReport?> GetCommandExecutionReport(Guid commandId)
     {
         _reports.TryGetValue(commandId, out var report);
@@ -59,9 +81,6 @@ public class CommandManager
                 try
                 {
                     _reports[command.Id].Status = CommandExecutionStatus.Processing;
-                    //var result = await _browserManager.Solve(captcha);
-                    //_reports[command.Id].Status = !string.IsNullOrEmpty(result) ? CommandExecutionStatus.Success : CommandExecutionStatus.Failed;
-                    //_reports[command.Id].Result = result;
                     _ = _browserManager.Solve(captcha).ContinueWith(async task =>
                     {
                         var result = await task;
@@ -79,8 +98,18 @@ public class CommandManager
     }
 }
 
+/// <summary>
+/// Конфигурация менеджера команд
+/// </summary>
 public class CommandManagerConfiguration
 {
+    /// <summary>
+    /// Ёмкость очереди
+    /// </summary>
     public int ChannelCapacity { get; set; } = 10;
+
+    /// <summary>
+    /// Режим очереди при наполнении
+    /// </summary>
     public BoundedChannelFullMode ChannelFullMode { get; set; } = BoundedChannelFullMode.Wait;
 }
