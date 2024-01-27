@@ -3,6 +3,9 @@ using System.Reflection;
 
 namespace CloudflareCaptchaSolver;
 
+/// <summary>
+/// 
+/// </summary>
 public static class CaptchaEndpointInstaller
 {
     /// <summary>

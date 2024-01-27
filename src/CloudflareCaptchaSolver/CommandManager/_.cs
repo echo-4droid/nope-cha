@@ -1,5 +1,8 @@
 ﻿namespace CloudflareCaptchaSolver;
 
+/// <summary>
+/// 
+/// </summary>
 public static class CommandManagerInstaller
 {
     /// <summary>
