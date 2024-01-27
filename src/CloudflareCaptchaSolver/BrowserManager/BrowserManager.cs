@@ -113,7 +113,7 @@ public partial class BrowserManager : IAsyncDisposable
 
         if (browser == null)
         {
-            var browserOptions = new BrowserTypeLaunchOptions();
+            var browserOptions = new BrowserTypeLaunchOptions() { Headless = true, Devtools = true };
 
             if (_configuration.Proxies.Count != 0)
             {
